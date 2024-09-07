@@ -1,13 +1,14 @@
-from pymongo import MongoClient
+from bson import ObjectId
 from flask import Flask, jsonify
-from flask import jsonify
 from flask_cors import CORS
 from flask_socketio import SocketIO
-import socketio
+import threading
+from data_collection.kafka_streaming import stream_data_from_kafka
 from data_collection.api_fetcher import fetch_news_data
 from nlp_processing.text_analysis import sentiment_analysis
 from app.models import store_data
 from app.utils import setup_logging, log_message
+import socketio
 
 def create_app():
     app = Flask(__name__)
@@ -21,21 +22,21 @@ def create_app():
         try:
             log_message('Fetching data from APIs...')
             news_data = fetch_news_data(query)
-            log_message(f'Fetched raw data: {news_data}')  # Log the raw data
+            log_message(f'Fetched raw data: {news_data}')  # raw data
         except Exception as e:
             return jsonify({"error": f"Error fetching data: {str(e)}"}), 500
 
         processed_data = []
         for item in news_data.get('articles', []):
-            # Check if 'text' is present in each item
             if 'title' in item and item['title']:
                 sentiment = sentiment_analysis(item['title'])
+                #collection
                 processed_data.append({
                     'title': item['title'],
                     'sentiment': sentiment
                 })
             else:
-                log_message(f"Skipping item with no text: {item}")  # Log items that are skipped
+                log_message(f"Skipping item with no text: {item}")  
 
         if not processed_data:
             log_message("No processed data to store.")
@@ -44,11 +45,12 @@ def create_app():
         try:
             store_data('disaster_data', processed_data)
             log_message(f'Stored data: {processed_data}')
-        except pymongo.errors.DuplicateKeyError as e:
-             log_message(f"Duplicate key error: {str(e)}")
-             return jsonify({"error": "Duplicate key error"}), 400
         except Exception as e:
             return jsonify({"error": f"Error storing data: {str(e)}"}), 500
+
+        for item in processed_data:
+            if "_id" in item and isinstance(item["_id"], ObjectId):
+                item["_id"] = str(item["_id"])
 
         return jsonify({"data": processed_data})
 
@@ -61,4 +63,6 @@ def create_app():
 app = create_app()
 
 if __name__ == '__main__':
+    kafka_thread = threading.Thread(target=stream_data_from_kafka, args=("realtime",))
+    kafka_thread.start()
     socketio.run(app, debug=True)
