@@ -5,12 +5,18 @@ const RealTimeUpdates = () => {
   const [updates, setUpdates] = useState([]);
 
   useEffect(() => {
+    console.log('Initiating socket connection...');
     initiateSocketConnection();
+
     subscribeToUpdates((update) => {
+      console.log('Received update:', update);
       setUpdates(prevUpdates => [update, ...prevUpdates]);
     });
 
-    return () => disconnectSocket();
+    return () => {
+      console.log('Disconnecting socket...');
+      disconnectSocket();
+    };
   }, []);
 
   return (
