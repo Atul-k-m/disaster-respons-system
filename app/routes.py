@@ -1,58 +1,61 @@
+from pymongo import MongoClient
 from flask import Flask, jsonify
-from data_collection.api_fetcher import fetch_x_data, fetch_news_data
-from nlp_processing.text_analysis import extract_named_entities, sentiment_analysis
-from nlp_processing.classification import classify_disaster
-from app.models import store_data  
+from flask import jsonify
+from flask_cors import CORS
+from flask_socketio import SocketIO
+import socketio
+from data_collection.api_fetcher import fetch_news_data
+from nlp_processing.text_analysis import sentiment_analysis
+from app.models import store_data
+from app.utils import setup_logging, log_message
 
 def create_app():
-  """Creates a Flask application instance with routes and error handling."""
-  app = Flask(__name__)
+    app = Flask(__name__)
+    CORS(app)
+    socketio = SocketIO(app, cors_allowed_origins="*")
+    setup_logging()
 
-  @app.route('/fetch-data', methods=['GET'])
-  def fetch_data():
-    """
-    Fetches disaster data, processes it, stores it, and returns a success message.
+    @app.route('/fetch-data', methods=['GET'])
+    def fetch_data():
+        query = "earthquake OR flood OR wildfire"
+        try:
+            log_message('Fetching data from APIs...')
+            news_data = fetch_news_data(query)
+            log_message(f'Fetched raw data: {news_data}')  # Log the raw data
+        except Exception as e:
+            return jsonify({"error": f"Error fetching data: {str(e)}"}), 500
 
-    Handles potential errors from data fetching and storage.
-    """
-    query = "earthquake OR flood OR wildfire OR funny"
-    try:
-      x_data = fetch_x_data(query)
-      news_data = fetch_news_data(query)
-    except Exception as e:
-     
-      return jsonify({"error": f"Error fetching data: {str(e)}"}), 500
+        processed_data = []
+        for item in news_data.get('articles', []):
+            # Check if 'text' is present in each item
+            if 'title' in item and item['title']:
+                sentiment = sentiment_analysis(item['title'])
+                processed_data.append({
+                    'title': item['title'],
+                    'sentiment': sentiment
+                })
+            else:
+                log_message(f"Skipping item with no text: {item}")  # Log items that are skipped
 
-    # Process and store the data
-    processed_data = []
-    for item in x_data.get('data', []):
-      entities = extract_named_entities(item['text'])
-      sentiment = sentiment_analysis(item['text'])
-      category = classify_disaster(item['text'])
-      processed_data.append({
-          'text': item['text'],
-          'entities': entities,
-          'sentiment': sentiment,
-          'category': category
-      })
+        if not processed_data:
+            log_message("No processed data to store.")
+            return jsonify({"error": "No data to store"}), 400
 
-    try:
-      store_data('disasters', processed_data)
-    except Exception as e:
-      #STORAGE HANDLING
-      return jsonify({"error": f"Error storing data: {str(e)}"}), 500
+        try:
+            store_data('disaster_data', processed_data)
+            log_message(f'Stored data: {processed_data}')
+        except Exception as e:
+            return jsonify({"error": f"Error storing data: {str(e)}"}), 500
 
-    return jsonify({"message": "Data fetched and processed successfully"})
+        return jsonify({"data": processed_data})
 
-  @app.errorhandler(Exception)  # Handle all uncaught exceptions
-  def handle_exception(error):
-    """Handles any uncaught exceptions and returns a generic error message."""
-    return jsonify({"error": f"An internal error occurred: {str(error)}"}), 500
+    @app.errorhandler(Exception)
+    def handle_exception(error):
+        return jsonify({"error": str(error)}), 500
 
-  return app
-
+    return app
 
 app = create_app()
 
 if __name__ == '__main__':
-  app.run(debug=True)
+    socketio.run(app, debug=True)

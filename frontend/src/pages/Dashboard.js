@@ -7,12 +7,21 @@ const Dashboard = () => {
   const [disasterData, setDisasterData] = useState([]);
 
   useEffect(() => {
-    const loadData = async () => {
-      const data = await fetchDisasterData();
-      setDisasterData(data);
+    const fetchData = async () => {
+      try {
+        console.log('Fetching disaster data...');
+        const response = await fetchDisasterData();
+        console.log('Data received:', response);
+        if (response.data) {
+          console.log('Processed data:', response.data);
+          setDisasterData(response.data);
+        }
+      } catch (error) {
+        console.error('Error fetching data:', error);
+      }
     };
 
-    loadData();
+    fetchData();
   }, []);
 
   return (

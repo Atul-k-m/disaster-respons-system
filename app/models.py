@@ -6,9 +6,9 @@ db = client['disaster_response']
 def store_data(collection_name, data):
   collection = db[collection_name]
   if isinstance(data, list):
-#IF DATA IS A LIST
     for item in data:
+      print(f"Inserting item: {item}")
       collection.insert_one(item)
   else:
-   
+    print(f"Inserting item: {data}")
     collection.insert_one(data)
