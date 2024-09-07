@@ -44,6 +44,9 @@ def create_app():
         try:
             store_data('disaster_data', processed_data)
             log_message(f'Stored data: {processed_data}')
+        except pymongo.errors.DuplicateKeyError as e:
+             log_message(f"Duplicate key error: {str(e)}")
+             return jsonify({"error": "Duplicate key error"}), 400
         except Exception as e:
             return jsonify({"error": f"Error storing data: {str(e)}"}), 500
 

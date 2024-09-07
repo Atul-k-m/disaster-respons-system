@@ -23,6 +23,6 @@ import requests
 
 # News API Fetcher
 def fetch_news_data(query):
-    url = f"https://newsapi.org/v2/everything?q={query}&apiKey={NEWS_API_KEY}&pageSize=1"
+    url = f"https://newsapi.org/v2/everything?q={query}&apiKey={NEWS_API_KEY}&pageSize=4"
     response = requests.get(url)
     return response.json()
